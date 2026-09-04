@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Personal PaaS Controller</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            background: #1a1a2e;
+            min-height: 100vh;
+            color: white;
+            padding: 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+            color: #667eea;
+        }
+        .project-card {
+            background: #16213e;
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-left: 4px solid #667eea;
+        }
+        .project-name {
+            font-size: 20px;
+            font-weight: bold;
+            color: #667eea;
+        }
+        .project-url {
+            color: #4ade80;
+            font-size: 14px;
+            margin-top: 5px;
+            word-break: break-all;
+        }
+        .project-status {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+        .status-live { background: #4ade80; color: #000; }
+        .status-deploying { background: #fbbf24; color: #000; }
+        .status-failed { background: #ef4444; color: #fff; }
+        .status-stopped { background: #6b7280; color: #fff; }
+        .btn {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            margin-right: 5px;
+            margin-top: 10px;
+            text-decoration: none;
+        }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-danger { background: #ef4444; color: white; }
+        .btn-success { background: #4ade80; color: #000; }
+        .btn-warning { background: #fbbf24; color: #000; }
+        .api-status {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 10px;
+            border-radius: 8px;
+            background: #16213e;
+        }
+        .api-status span { margin: 0 10px; }
+        .configured { color: #4ade80; }
+        .not-configured { color: #ef4444; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 Personal PaaS Controller</h1>
+        
+        <div class="api-status" id="apiStatus">
+            <span id="renderStatus">Loading...</span>
+            <span id="githubStatus">Loading...</span>
+        </div>
+        
+        <div id="projectsContainer">
+            <p style="text-align:center;color:#666;">Loading projects...</p>
+        </div>
+    </div>
+
+    <script>
+        const clientId = 'web-' + Math.random().toString(36).substr(2, 9);
+        
+        // Register client
+        fetch('/api/register', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ clientId })
+        });
+        
+        // Heartbeat
+        setInterval(() => {
+            fetch('/api/heartbeat', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ clientId })
+            });
+        }, 30000);
+        
+        // Load health status
+        fetch('/api/health')
+            .then(r => r.json())
+            .then(data => {
+                document.getElementById('renderStatus').innerHTML = 
+                    data.renderApiConfigured ? '✅ Render API' : '❌ Render API';
+                document.getElementById('renderStatus').className = 
+                    data.renderApiConfigured ? 'configured' : 'not-configured';
+                
+                document.getElementById('githubStatus').innerHTML = 
+                    data.githubConfigured ? '✅ GitHub' : '❌ GitHub';
+                document.getElementById('githubStatus').className = 
+                    data.githubConfigured ? 'configured' : 'not-configured';
+            });
+        
+        // Load projects
+        function loadProjects() {
+            fetch('/api/projects')
+                .then(r => r.json())
+                .then(data => {
+                    const container = document.getElementById('projectsContainer');
+                    
+                    if (!data.projects || data.projects.length === 0) {
+                        container.innerHTML = '<p style="text-align:center;color:#666;">No projects deployed yet</p>';
+                        return;
+                    }
+                    
+                    container.innerHTML = data.projects.map(p => `
+                        <div class="project-card">
+                            <div class="project-name">📦 ${p.name}</div>
+                            <div class="project-url">🔗 ${p.url || 'No URL'}</div>
+                            <span class="project-status status-${p.status || 'deploying'}">${p.status || 'unknown'}</span>
+                            <br>
+                            <a class="btn btn-primary" href="${p.url || '#'}" target="_blank">Visit</a>
+                            <button class="btn btn-success" onclick="restartProject('${p.id}')">Restart</button>
+                            <button class="btn btn-warning" onclick="stopProject('${p.id}')">Stop</button>
+                            <button class="btn btn-danger" onclick="deleteProject('${p.id}')">Delete</button>
+                        </div>
+                    `).join('');
+                });
+        }
+        
+        function restartProject(id) {
+            fetch(`/api/projects/${id}/restart`, {method: 'POST'})
+                .then(() => loadProjects());
+        }
+        
+        function stopProject(id) {
+            fetch(`/api/projects/${id}/stop`, {method: 'POST'})
+                .then(() => loadProjects());
+        }
+        
+        function deleteProject(id) {
+            if (confirm('Delete this project?')) {
+                fetch(`/api/projects/${id}`, {method: 'DELETE'})
+                    .then(() => loadProjects());
+            }
+        }
+        
+        loadProjects();
+    </script>
+</body>
+</html>
